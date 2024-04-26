@@ -3,7 +3,7 @@ import Mathlib.Data.Set.Basic
 import Mathlib.Init.Set
 import Std
 
-open Nat
+open Nat Classical
 
 universe u
 
