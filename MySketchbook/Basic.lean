@@ -5,6 +5,8 @@ import Std
 
 open Nat
 
+universe u
+
 #print Nat
 
 namespace my_sketch
@@ -12,9 +14,9 @@ namespace my_sketch
   | 0     => {}
   | n + 1 => (range n) ∪ {n}
 
-  def Is_Injective {X Y : Type} (f : X → Y) : Prop := ∀ (x₁ x₂ : X), f x₁ = f x₂ → x₁ = x₂
-  def Is_Surjective {X Y : Type} (f : X → Y) : Prop := ∀ y : Y, ∃ x : X , f x = y
-  def Is_Bijective {X Y : Type} (f : X → Y) : Prop := Is_Injective (f) ∧ Is_Surjective (f)
+  def Is_Injective {X Y : Type u} (f : X → Y) : Prop := ∀ (x₁ x₂ : X), f x₁ = f x₂ → x₁ = x₂
+  def Is_Surjective {X Y : Type u} (f : X → Y) : Prop := ∀ y : Y, ∃ x : X , f x = y
+  def Is_Bijective {X Y : Type u} (f : X → Y) : Prop := Is_Injective (f) ∧ Is_Surjective (f)
 
   postfix:0 " is injective" => Is_Injective
   postfix:0 " is surjective" => Is_Surjective
@@ -32,6 +34,9 @@ namespace my_sketch
     repeat rw [range]
     rw [Set.empty_union]
     rfl
+
+  theorem is_in_range_succ (n : ℕ) : n ∈ range (succ n) := by
+    exact Set.mem_union_right (range n) rfl
 
   lemma range_contains_smaller_numbers {n k : ℕ} : k < n → k ∈ range n := by
     intro h
@@ -77,24 +82,41 @@ namespace my_sketch
     rw [mem_of_range_iff]
     exact Nat.lt_of_lt_of_le hx h
 
-  lemma rev_of_range_is_increasing {n m : ℕ} : range n ⊆ range m → n ≤ m := by
-    intro h
-    induction m with
-    | zero => sorry
-    | succ m  hm =>
-      induction n with
-      | zero => exact Nat.zero_le (succ m)
-      | succ n hn =>
-        repeat rw [range] at h
-        replace h : range n ⊆ range m := by
-          intro x hx
-
+  lemma range_is_increasing' {n m : ℕ} : range n ⊆ range m ↔ n ≤ m := by
+    constructor
+    · intro h
+      cases n with
+      | zero =>
+        exact Nat.zero_le m
+      | succ n =>
+        replace h := h (mem_of_range_iff.mpr (lt.base n))
+        rw [mem_of_range_iff] at h
+        linarith
+    · exact range_is_increasing
 
   theorem range_is_injective : range is injective := by
     intro n m h
     rw [Set.Subset.antisymm_iff] at h
-    have h1 := rev_of_range_is_increasing h.left
-    have h2 := rev_of_range_is_increasing h.right
-    exact Nat.le_antisymm h1 h2
+    repeat rw [range_is_increasing'] at h
+    linarith
+
+  theorem range_is_not_surjective: ¬ (range is surjective) := by
+    rw [Is_Surjective]
+    push_neg
+    use {1}
+    by_contra! h
+    have ⟨n, h⟩ := h
+    cases n with
+    | zero =>
+      rw [range] at h
+      have h' : 1 ∈ ∅ := by
+       rw [h]
+       exact rfl
+      exact h'
+    | succ n =>
+      have h' : 0 < succ n := by exact zero_lt_succ n
+      rw [← mem_of_range_iff] at h'
+      rw [h] at h'
+      exact Nat.zero_ne_one h'
 
 end my_sketch
