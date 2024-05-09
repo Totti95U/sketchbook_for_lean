@@ -4,6 +4,8 @@ import Std
 import Mathlib.Tactic
 import Mathlib.Data.Real.Basic
 
+open Classical
+
 namespace my_sketch
 -- ext をつけると, "その構造が等しい ↔ 各要素が等しい" と設定される
 @[ext]
@@ -335,8 +337,8 @@ end
 
 -- `class` と `instance` を使うことで記法を統一することができる
 /-
-例えば, 任意の `Group` インスタンスの演算としては `+`,
-任意の `AddGroup` インスタンスの演算として `*`,
+例えば, 任意の `Group` インスタンスの演算としては `*`,
+任意の `AddGroup` インスタンスの演算として `+`,
 任意の `Ring` インスタンスの演算としては `+` と `*`
 
 が使えるようになっている. これは `class` と `instance` を用いたことによる恩恵である
@@ -386,5 +388,224 @@ instance : AddGroup₂ Point where
   add_left_neg := sorry
 
 -- § 6.3 Building the Gaussian Integers
+namespace GaussInt
+-- 今までに述べたことを駆使して複素整数型 (ガウス整数) を作ってみよう
+@[ext]
+structure gaussInt where
+  re : ℤ
+  im : ℤ
+
+-- 主要な数や演算を定める
+instance : Zero gaussInt := ⟨⟨0, 0⟩⟩
+
+instance : One gaussInt := ⟨⟨1, 0⟩⟩
+
+instance : Add gaussInt := ⟨fun x y ↦ ⟨x.re + y.re, x.im + y.im⟩⟩
+
+instance : Neg gaussInt := ⟨fun x ↦ ⟨-x.re, -x.im⟩⟩
+
+instance : Mul gaussInt := ⟨fun x y ↦ ⟨x.re * y.re - x.im * y.im, x.re * y.im + x.im * y.re⟩⟩
+
+-- ちゃんと定義が機能しているか確認してみよう
+
+theorem zero_def : (0 : gaussInt) = ⟨0, 0⟩ := rfl
+
+theorem one_def : (1 : gaussInt) = ⟨1, 0⟩ := rfl
+
+theorem add_def (x y : gaussInt) : x + y = ⟨x.re + y.re, x.im + y.im⟩ := rfl
+
+theorem neg_def (x : gaussInt) : -x = ⟨-x.re, -x.im⟩ := rfl
+
+theorem mul_def (x y : gaussInt) : x * y = ⟨x.re * y.re - x.im * y.im, x.re * y.im + x.im * y.re⟩ := rfl
+
+-- 見やすくするための簡約規則を書く
+
+@[simp]
+theorem zero_re : (0 : gaussInt).re = 0 := rfl
+
+@[simp]
+theorem zero_im : (0 : gaussInt).im = 0 := rfl
+
+@[simp]
+theorem one_re : (1 : gaussInt).re = 1 := rfl
+
+@[simp]
+theorem one_im : (1 : gaussInt).im = 0 := rfl
+
+@[simp]
+theorem add_re (x y : gaussInt) : (x + y).re = x.re + y.re := rfl
+
+@[simp]
+theorem add_im (x y : gaussInt) : (x + y).im = x.im + y.im := rfl
+
+@[simp]
+theorem neg_re (x : gaussInt) : (-x).re = -(x.re) := rfl
+
+@[simp]
+theorem neg_im (x : gaussInt) : (-x).im = -(x.im) := rfl
+
+@[simp]
+theorem mul_re (x y : gaussInt) : (x * y).re = x.re * y.re - x.im * y.im := rfl
+
+@[simp]
+theorem mul_im (x y : gaussInt) : (x * y).im = x.re * y.im + x.im * y.re := rfl
+
+-- ガウス整数は可換環になる
+/-
+TIPS: `instance : CommRing gaussInt := _` と打ち, 左に表示される電球マークをクリックして `generate (minimum) skelton ...` を押すと, 示すべきものを自動的に書き出してくれる
+-/
+instance instCommRing : CommRing gaussInt where -- ← このエラー消えない. なぜ
+  add := (· + ·)
+  add_assoc := by
+    intro x y z
+    ext
+    <;> dsimp
+    <;> ring
+  zero := 0
+  zero_add := by
+    intros
+    ext <;> dsimp <;> ring
+  add_zero := by
+    intros
+    ext <;> dsimp <;> ring
+  nsmul := fun n x ↦ ⟨n * x.re, n * x.re⟩
+  add_comm := by
+    intros
+    ext <;> dsimp <;> ring
+  mul := (· * ·)
+  left_distrib := by
+    intros
+    ext <;> dsimp <;> ring
+  right_distrib := by
+    intros
+    ext <;> dsimp <;> ring
+  zero_mul := by
+    intros
+    ext <;> dsimp <;> ring
+  mul_zero := by
+    intros
+    ext <;> dsimp <;> ring
+  mul_assoc := by
+    intros
+    ext <;> dsimp <;> ring
+  one := 1
+  one_mul := by
+    intros
+    ext <;> dsimp <;> ring
+  mul_one := by
+    intros
+    ext <;> dsimp <;> ring
+  neg := fun x ↦ -x
+  zsmul := fun n x ↦ ⟨n * x.re, n * x.im⟩
+  add_left_neg := by
+    intros
+    ext <;> dsimp <;> ring
+  mul_comm := by
+    intros
+    ext <;> dsimp <;> ring
+
+-- 環論の定理の多くは零環でないことを前提にしていることが多いのでそれを示しておこう
+instance : Nontrivial gaussInt := by
+  use 0, 1
+  rw [Ne, gaussInt.ext_iff]
+  simp
+
+-- ガウス整数環は Euclid 整域 (EUD), すなわち割り算ができることを示していこう
+
+-- ℤ も　EUD であり, Lean でもデフォルトで除算と余りが定義されている
+example (a b : ℤ) : a = b * (a / b) + a % b :=
+  Eq.symm (Int.ediv_add_emod a b)
+
+example (a b : ℤ) : b ≠ 0 → 0 ≤ a % b :=
+  Int.emod_nonneg a
+
+example (a b : ℤ) : b ≠ 0 → a % b < |b| :=
+  Int.emod_lt a
+
+-- gaussInt が EUD であることを示すが, 証明で何をやっているかについては reference を読んでほしい
+def div' (a b : ℤ) := (a + b / 2) / b
+
+def mod' (a b : ℤ) := (a + b / 2) % b - b / 2
+
+theorem div'_add_mod' (a b : ℤ) : b * div' a b + mod' a b = a := by
+  rw [div', mod']
+  linarith [Int.ediv_add_emod (a + b / 2) b]
+
+theorem abs_mod'_le (a b : ℤ) (h : 0 < b) : |mod' a b| ≤ b / 2 := by
+  rw [mod', abs_le]
+  constructor
+  · linarith [Int.emod_nonneg (a + b / 2) h.ne']
+  have := Int.emod_lt_of_pos (a + b / 2) h
+  have := Int.ediv_add_emod b 2
+  have := Int.emod_lt_of_pos b zero_lt_two
+  linarith
+
+theorem mod'_eq (a b : ℤ) : mod' a b = a - b * div' a b := by linarith [div'_add_mod' a b]
+
+theorem sq_add_sq_eq_zero {α : Type*} [LinearOrderedRing α] (x y : α) :
+    x ^ 2 + y ^ 2 = 0 ↔ x = 0 ∧ y = 0 := by
+  constructor
+  · intro h
+    have hx2 : x ^ 2 = 0 := by
+      have x_sq_nonneg := sq_nonneg x
+      have := add_le_add_left (sq_nonneg y) (x ^ 2)
+      rw [add_zero] at this
+      rw [h] at this
+      exact le_antisymm this x_sq_nonneg
+    have hy2 : y ^ 2 = 0 := by
+      have y_sq_nonneg := sq_nonneg y
+      have := add_le_add_right (sq_nonneg x) (y ^ 2)
+      rw [zero_add] at this
+      rw [h] at this
+      exact le_antisymm this y_sq_nonneg
+    constructor
+    rw [← sq_eq_zero_iff]
+    exact hx2
+    rw [← sq_eq_zero_iff]
+    exact hy2
+  intro h
+  rw [h.left, h.right]
+  simp
+
+-- ノルムを定める
+def norm (x : gaussInt) := x.re ^ 2 + x.im ^ 2
+
+@[simp]
+theorem norm_nonneg (x : gaussInt) : 0 ≤ norm x := by
+  exact add_le_add (sq_nonneg x.re) (sq_nonneg x.im)
+
+theorem norm_eq_zero (x : gaussInt) : norm x = 0 ↔ x = 0 := by
+  rw [norm, sq_add_sq_eq_zero]
+  constructor
+  intro h
+  exact (gaussInt.ext_iff x 0).mpr h
+  exact fun a ↦ gaussInt.mk.inj a
+
+theorem norm_pos (x : gaussInt) : 0 < norm x ↔ x ≠ 0 := by
+  constructor
+  · intro h
+    by_contra hx
+    rw [← norm_eq_zero] at hx
+    aesop
+  · contrapose!
+    intro h
+    rw [← norm_eq_zero]
+    exact le_antisymm h (norm_nonneg x)
+
+theorem norm_mul (x y : gaussInt) : norm (x * y) = norm x * norm y := by
+  simp [norm] ; ring
+
+-- 複素共役を定める
+def conj (x : gaussInt) : gaussInt := ⟨x.re, -x.im⟩
+
+@[simp]
+theorem conj_re (x : gaussInt) : (conj x).re = x.re := rfl
+
+@[simp]
+theorem conj_im (x : gaussInt) : (conj x).im = -x.im := rfl
+
+theorem norm_conj (x : gaussInt) : norm (conj x) = norm x := by simp [norm]
+
+end GaussInt
 
 end my_sketch
