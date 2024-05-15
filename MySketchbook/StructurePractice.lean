@@ -406,6 +406,8 @@ instance : Neg gaussInt := ⟨fun x ↦ ⟨-x.re, -x.im⟩⟩
 
 instance : Mul gaussInt := ⟨fun x y ↦ ⟨x.re * y.re - x.im * y.im, x.re * y.im + x.im * y.re⟩⟩
 
+instance : Sub gaussInt := ⟨fun x y ↦ x + (-y)⟩
+
 -- ちゃんと定義が機能しているか確認してみよう
 
 theorem zero_def : (0 : gaussInt) = ⟨0, 0⟩ := rfl
@@ -439,6 +441,12 @@ theorem add_re (x y : gaussInt) : (x + y).re = x.re + y.re := rfl
 theorem add_im (x y : gaussInt) : (x + y).im = x.im + y.im := rfl
 
 @[simp]
+theorem sub_re (x y : gaussInt) : (x - y).re = x.re - y.re := rfl
+
+@[simp]
+theorem sub_im (x y : gaussInt) : (x - y).im = x.im - y.im := rfl
+
+@[simp]
 theorem neg_re (x : gaussInt) : (-x).re = -(x.re) := rfl
 
 @[simp]
@@ -455,24 +463,25 @@ theorem mul_im (x y : gaussInt) : (x * y).im = x.re * y.im + x.im * y.re := rfl
 TIPS: `instance : CommRing gaussInt := _` と打ち, 左に表示される電球マークをクリックして `generate (minimum) skelton ...` を押すと, 示すべきものを自動的に書き出してくれる
 -/
 instance instCommRing : CommRing gaussInt where -- ← このエラー消えない. なぜ
+  zero := 0
+  one := 1
   add := (· + ·)
+  neg x := -x
+  mul := (· * ·)
   add_assoc := by
     intro x y z
     ext
     <;> dsimp
     <;> ring
-  zero := 0
   zero_add := by
     intros
     ext <;> dsimp <;> ring
   add_zero := by
     intros
     ext <;> dsimp <;> ring
-  nsmul := fun n x ↦ ⟨n * x.re, n * x.re⟩
   add_comm := by
     intros
     ext <;> dsimp <;> ring
-  mul := (· * ·)
   left_distrib := by
     intros
     ext <;> dsimp <;> ring
@@ -488,19 +497,18 @@ instance instCommRing : CommRing gaussInt where -- ← このエラー消えな�
   mul_assoc := by
     intros
     ext <;> dsimp <;> ring
-  one := 1
   one_mul := by
     intros
     ext <;> dsimp <;> ring
   mul_one := by
     intros
     ext <;> dsimp <;> ring
-  neg := fun x ↦ -x
-  zsmul := fun n x ↦ ⟨n * x.re, n * x.im⟩
-  add_left_neg := by
+  mul_comm := by
     intros
     ext <;> dsimp <;> ring
-  mul_comm := by
+  zsmul n x := ⟨n * x.re, n * x.im⟩
+  nsmul n x := ⟨n * x.re, n * x.im⟩
+  add_left_neg := by
     intros
     ext <;> dsimp <;> ring
 
@@ -605,6 +613,66 @@ theorem conj_re (x : gaussInt) : (conj x).re = x.re := rfl
 theorem conj_im (x : gaussInt) : (conj x).im = -x.im := rfl
 
 theorem norm_conj (x : gaussInt) : norm (conj x) = norm x := by simp [norm]
+
+instance : Div gaussInt :=
+  ⟨fun x y ↦ ⟨div' (x * conj y).re (norm y), div' (x * conj y).im (norm y)⟩⟩
+
+instance : Mod gaussInt :=
+  ⟨fun x y ↦ x - y * (x / y)⟩
+
+theorem div_def (x y : gaussInt) :
+    x / y = ⟨div' (x * conj y).re (norm y), div' (x * conj y).im (norm y)⟩ := rfl
+
+theorem mod_def (x y : gaussInt) : x % y = x - y * (x / y) := rfl
+
+theorem norm_mod_lt (x : gaussInt) {y : gaussInt} (hy : y ≠ 0) : norm (x % y) < norm y := by
+  have norm_y_pos : 0 < norm y := by rwa [norm_pos]
+  have H1 : x % y * conj y = ⟨mod' (x * conj y).re (norm y), mod' (x * conj y).im (norm y)⟩
+  · ext <;> simp [mod'_eq, mod_def, div_def, norm] <;> ring
+  have H2 : norm (x % y) * norm y ≤ norm y / 2 * norm y
+  · calc
+    norm (x % y) * norm y = norm (x % y * conj y) := by simp only [norm_mul, norm_conj]
+    _ = |mod' (x.re * y.re + x.im * y.im) (norm y)|^2 + |mod' (-(x.re * y.im) + x.im * y.re) (norm y)|^2 := by simp [H1, norm, sq_abs]
+    _ ≤ ((norm y) / 2) ^ 2 + ((norm y) / 2) ^ 2 := by gcongr <;> apply abs_mod'_le _ _ norm_y_pos
+    _ = norm y / 2 * (norm y / 2 * 2) := by ring
+    _ ≤ norm y / 2 * norm y := by gcongr <;> apply Int.ediv_mul_le; norm_num
+  calc
+    norm (x % y) ≤ norm y / 2 := le_of_mul_le_mul_right H2 norm_y_pos
+    _ < norm y := by
+        apply Int.ediv_lt_of_lt_mul
+        · norm_num
+        · linarith
+
+theorem coe_natAbs_norm (x : gaussInt) : ((norm x).natAbs : ℤ) = norm x := Int.natAbs_of_nonneg (norm_nonneg _)
+
+theorem natAbs_norm_mod_lt (x y : gaussInt) (hy : y ≠ 0) : (norm (x % y)).natAbs < (norm y).natAbs:= by
+  apply Int.ofNat_lt.1
+  simp only [Int.natCast_natAbs, abs_of_nonneg, norm_nonneg]
+  apply norm_mod_lt x hy
+
+theorem not_norm_mul_left_lt_norm (x : gaussInt) {y : gaussInt} (hy : y ≠ 0) : ¬(norm (x * y)).natAbs < (norm x).natAbs := by
+  apply not_lt_of_ge
+  rw [norm_mul, Int.natAbs_mul]
+  apply le_mul_of_one_le_right (Nat.zero_le _)
+  apply Int.ofNat_le.1
+  rw [coe_natAbs_norm]
+  exact Int.add_one_le_of_lt ((norm_pos _).mpr hy)
+
+instance : EuclideanDomain gaussInt :=
+  { instCommRing with
+    quotient := (· / ·)
+    remainder := (· % ·)
+    quotient_mul_add_remainder_eq :=
+      fun x y ↦ by simp only; rw [mod_def, add_comm, sub_add_cancel]
+    quotient_zero := fun x ↦ by
+      simp [div_def, norm, div']
+      rfl
+    r := (measure (Int.natAbs ∘ norm)).1
+    r_wellFounded := (measure (Int.natAbs ∘ norm)).2
+    remainder_lt := natAbs_norm_mod_lt
+    mul_left_not_lt := not_norm_mul_left_lt_norm }
+
+example (x : gaussInt) : Irreducible x ↔ Prime x := irreducible_iff_prime
 
 end GaussInt
 
